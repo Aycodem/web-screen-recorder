@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Screen Recorder</title>
+    <style>
+        body{
+            background-color: antiquewhite;
+        }
+        #timerPopup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgb(85, 85, 236);
+            color: rgb(240, 229, 34);
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+            font-size: larger;
+            font-family: 'Segoe UI';
+            font-weight: bolder;
+        }
+        button{
+            background-color: blue;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            cursor:pointer;
+            font-size: larger;
+            font-family: 'Segoe UI';
+            font-weight: bolder;
+        }
+        button:hover{
+            opacity: .7;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="startRecordingBtn">Start Recording</button>
+    <button id="stopBtn" disabled>Stop Recording</button>
+    <button id="downloadBtn" disabled>Download Video</button>
+    <video id="recordedVideo" controls></video>
+    <div id="timerPopup"></div>
+    <audio id="timerAudio" src="tone.mp3"></audio> <!-- Add the path to your sound effect file -->
+
+    <script>
+        let mediaRecorder;
+        let recordedChunks = [];
+        let timer;
+
+        const startRecordingBtn = document.getElementById('startRecordingBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const recordedVideo = document.getElementById('recordedVideo');
+        const timerPopup = document.getElementById('timerPopup');
+        const timerAudio = document.getElementById('timerAudio');
+
+        startRecordingBtn.addEventListener('click', startRecording);
+        stopBtn.addEventListener('click', stopRecording);
+        downloadBtn.addEventListener('click', downloadRecording);
+
+        async function startRecording() {
+            startRecordingBtn.disabled = true;
+            stopBtn.disabled = false;
+            downloadBtn.disabled = true;
+
+            try {
+                const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const videoStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                const keyboardStream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: 'your-keyboard-microphone-device-id' } });
+
+                const combinedStream = new MediaStream([
+                    ...audioStream.getTracks(),
+                    ...videoStream.getTracks(),
+                    ...keyboardStream.getTracks()
+                ]);
+
+                recordedVideo.srcObject = combinedStream;
+
+                mediaRecorder = new MediaRecorder(combinedStream);
+
+                showTimerPopup();
+                let countdown = 10;
+
+                timer = setInterval(() => {
+                    if (countdown >= 1) {
+                        timerPopup.innerText = `Recording starts in ${countdown--} seconds!`;
+                    } else {
+                        hideTimerPopup();
+                        clearInterval(timer);
+                        mediaRecorder.start();
+                        playTimerAudio();
+                    }
+                }, 1000);
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    recordedVideo.src = URL.createObjectURL(blob);
+                    downloadBtn.disabled = false;
+                };
+            } catch (error) {
+                console.error('Error accessing screen, microphone, or keyboard:', error);
+                startRecordingBtn.disabled = false; // Enable the button on error
+            }
+        }
+
+        function stopRecording() {
+            clearInterval(timer);
+            hideTimerPopup();
+            startRecordingBtn.disabled = false;
+            stopBtn.disabled = true;
+            downloadBtn.disabled = false;
+
+            if (mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+        }
+
+        function downloadRecording() {
+            const blob = new Blob(recordedChunks, { type: 'video/mp4' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'recorded_video.mp4';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function showTimerPopup() {
+            timerPopup.style.display = 'block';
+        }
+
+        function hideTimerPopup() {
+            timerPopup.style.display = 'none';
+        }
+
+        function playTimerAudio() {
+            timerAudio.play();
+        }
+    </script>
+</body>
+</html>
